@@ -1,55 +1,57 @@
 # Edge-Weighting-Driven Rock Slope Fracture Detection and Scale Effect Analysis
 
-This repository contains the image data, annotations, configuration files, and Python code for rock-slope fracture segmentation and inference-scale analysis. It does not contain trained checkpoints, prediction outputs, metric tables, figures, logs, or manuscript files.
+This repository provides image data, annotations, model configurations, and Python code for rock-slope fracture segmentation and inference-scale analysis. Trained checkpoints, prediction outputs, metric tables, figures, logs, and manuscript files are not included.
 
 ## Data
 
 | Path | Contents |
 | --- | --- |
-| `02_实验数据/slope_fracture` | 264 training and 65 validation JPEG/PNG image–mask pairs. In these masks, 0 is background and 1 is fracture. |
-| `02_实验数据/small` | Forty validation image–mask pairs assigned to the small-scale group. |
-| `02_实验数据/large` | Twenty-five validation image–mask pairs assigned to the large-scale group. |
-| `02_实验数据/三幅重建图像与标注` | Three complete 2560 × 1440 views (`a11`, `a13`, `a14`), LabelMe JSON annotations, and binary reference masks. In these masks, 0 is background and 255 is fracture. |
+| `data/slope_fracture` | 264 training and 65 validation image–mask pairs. Mask values are 0 for background and 1 for fracture. |
+| `data/small` | 40 validation image–mask pairs in the small-scale group. |
+| `data/large` | 25 validation image–mask pairs in the large-scale group. |
+| `data/full_views` | Three complete 2560 × 1440 views (`a11`, `a13`, `a14`), LabelMe annotations, and binary reference masks. Mask values are 0 for background and 255 for fracture. |
 
-The `small` and `large` groups are a non-overlapping partition of the same 65 validation images, not additional samples. Run `python 03_程序/check_data.py` to check image–mask pairing, dimensions, class values, and byte identity with the validation split. See [annotation provenance](02_实验数据/三幅重建图像与标注/说明.md) before using the three full-view masks.
+The `small` and `large` groups partition the same 65 validation images; they are not additional samples. Run `python src/check_data.py` to verify image–mask pairing, dimensions, class values, and byte identity with the validation set. Read the [annotation notes](data/full_views/ANNOTATIONS.md) before using the full-view masks. File counts and sizes are recorded in [`data/dataset_manifest.json`](data/dataset_manifest.json).
 
 ## Code and configurations
 
 | Path | Purpose |
 | --- | --- |
-| `03_程序/research_extensions` | Registers the binary dataset and `EdgeAwareLoss` with MMSegmentation. |
-| `04_模型配置与日志/work_dirs/*/*.py` | Four model configuration snapshots. The edge-aware U-Net has an additional run-specific config one directory deeper. |
-| `03_程序/configs/evaluation_65_images.py` | Fixed validation pipeline for the two scale groups. |
-| `03_程序/run_scale_evaluation.py` | Evaluate the 40/25 split, accumulating per-class intersections and unions. |
-| `03_程序/run_window_experiment.py` | Compare single-pass whole-image resizing with sliding-window detection on the three complete views. |
-| `03_程序/orientation.py` | Skeleton-path extraction and length-weighted image-plane direction distributions. |
-| `03_程序/make_figures13_16.py` | Build tables and figures from predictions created locally. |
-| `03_程序/evaluate_saved_masks.py` | Recompute pixel metrics from locally saved masks. |
-| `03_程序/virtual_camera_fracture.py` | Virtual-camera and trace-analysis source code; Blender scene assets are supplied separately. |
+| `src/research_extensions` | Register the binary dataset and `EdgeAwareLoss` with MMSegmentation. |
+| `third_party/mmsegmentation/mmseg` | Core MMSegmentation source package from the local research environment. |
+| `third_party/mmsegmentation/tools/train.py` and `test.py` | MMSegmentation training and testing entry points. |
+| `configs/unet.py` and `configs/ours.py` | U-Net training configurations without and with edge-aware loss. |
+| `configs/deeplabv3plus.py` and `configs/segmenter.py` | Comparison-model training configurations. |
+| `configs/evaluation_65_images.py` | Fixed validation pipeline for the two scale groups. |
+| `src/run_scale_evaluation.py` | Evaluate the 40/25 split using per-class intersections and unions. |
+| `src/run_window_experiment.py` | Compare single-pass whole-image resizing with sliding-window detection on the three full views. |
 
-The published configuration copies preserve the model architectures and data pipelines. Their `data_root` points to this repository, `load_from` is cleared, and `custom_imports` registers the local extension. These are portability changes; they do not change the recorded network or augmentation settings. The source environment used Python 3.8.18, PyTorch 2.1.0, torchvision 0.16.0, MMCV 2.1.0, MMEngine 0.9.1, MMSegmentation 1.2.2, NumPy 1.24.3, scikit-image 0.21.0, Pillow 10.0.1, and CUDA 11.8.
+The project-specific edge-aware loss is implemented in [`src/research_extensions/my_loss.py`](src/research_extensions/my_loss.py). It identifies label boundaries from 3 × 3 neighborhoods and weights cross-entropy at those pixels. The edge-aware U-Net configuration combines ordinary cross-entropy (`loss_weight=1`) with this boundary term (`loss_weight=10`) in `loss_decode`. The extension is registered through `src/research_extensions/__init__.py`.
+
+The model configurations retain the recorded architectures and data pipelines. Their `data_root` values point to this repository, `load_from` is cleared, and `custom_imports` registers the local extension. These path changes do not alter the network or augmentation settings. The included MMSegmentation snapshot retains its [Apache 2.0 license](third_party/mmsegmentation/LICENSE). Its source and local changes are described in the [snapshot notes](third_party/mmsegmentation/README.md). The source environment used Python 3.8.18, PyTorch 2.1.0, torchvision 0.16.0, MMCV 2.1.0, MMEngine 0.9.1, MMSegmentation 1.2.2, NumPy 1.24.3, scikit-image 0.21.0, Pillow 10.0.1, and CUDA 11.8.
 
 ## Running the analyses
 
-From the repository root, make `03_程序` importable so the custom classes can be registered. In PowerShell:
+From the repository root, add both the project code and the included MMSegmentation source to `PYTHONPATH`. In PowerShell:
 
 ```powershell
-$env:PYTHONPATH = (Resolve-Path '03_程序').Path
-python '03_程序/check_data.py'
+$env:PYTHONPATH = (Resolve-Path 'src').Path + ';' + (Resolve-Path 'third_party/mmsegmentation').Path
+python 'src/check_data.py'
 ```
 
-Supply the checkpoint corresponding to each configuration. The validation script uses the cross-entropy U-Net checkpoint; the three-view strategy comparison uses the edge-aware U-Net checkpoint. The scripts accept checkpoint paths without requiring the original directory layout:
+The included MMSegmentation entry points can train or test a model with these configurations. Their output directories are ignored by Git. For example:
 
 ```powershell
-python '03_程序/run_scale_evaluation.py' --checkpoint 'PATH_TO_CE_UNET_CHECKPOINT.pth'
-python '03_程序/run_window_experiment.py' --checkpoint 'PATH_TO_EDGE_AWARE_UNET_CHECKPOINT.pth'
-python '03_程序/run_window_experiment.py' --baseline --checkpoint 'PATH_TO_EDGE_AWARE_UNET_CHECKPOINT.pth'
-python '03_程序/make_figures13_16.py'
-python '03_程序/evaluate_saved_masks.py'
+python 'third_party/mmsegmentation/tools/train.py' 'configs/ours.py' --work-dir 'outputs/ours'
+python 'third_party/mmsegmentation/tools/test.py' 'configs/ours.py' 'PATH_TO_OURS_CHECKPOINT.pth' --work-dir 'outputs/ours_test'
 ```
 
-The window script compares long-edge whole-image sizes of 1024, 512, and 256 pixels with unscaled square windows of the same side lengths. Windows have 50% nominal overlap; a strict majority vote resolves overlaps, with ties assigned to background. The `--baseline` run processes each original image once. The 65-image evaluation uses its separately archived resize-and-slide pipeline. Generated predictions, figures, tables, and logs remain local under ignored output directories.
+Supply the checkpoint corresponding to each configuration. Checkpoints are not included in this repository.
 
-## 中文说明
+```powershell
+python 'src/run_scale_evaluation.py' --checkpoint 'PATH_TO_UNET_CHECKPOINT.pth'
+python 'src/run_window_experiment.py' --checkpoint 'PATH_TO_OURS_CHECKPOINT.pth'
+python 'src/run_window_experiment.py' --baseline --checkpoint 'PATH_TO_OURS_CHECKPOINT.pth'
+```
 
-本仓库仅发布研究数据、标注、配置和程序，不含权重、预测结果、指标表、图件、日志及论文。训练集 264 张、验证集 65 张；`small` 40 张和 `large` 25 张是同一验证集的两个不重叠分组。三幅完整图像的掩码采用 0/255 编码，训练与验证掩码采用 0/1 编码。运行前请阅读[三图标注来源](02_实验数据/三幅重建图像与标注/说明.md)。整图缩放、滑动窗口检测和 65 图分组验证使用的推理流程不同，程序分别给出。
+The window experiment compares whole-image long-edge sizes of 1024, 512, and 256 pixels with unscaled square windows of the same side lengths. Windows use 50% nominal overlap. A strict majority vote resolves overlapping predictions, with ties assigned to background. The `--baseline` run processes each original image once. The 65-image evaluation uses a separate resize-and-slide pipeline. Generated predictions and metrics remain in ignored local output directories.

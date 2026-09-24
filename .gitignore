@@ -1,7 +1,13 @@
 # Local inference outputs, figures, logs, and checkpoints are intentionally absent.
-01_论文与图表/
-05_评价结果/
+figures/
+results/
 /work_dirs/
+/checkpoints/
+/outputs/
+*.egg-info/
+.mim/
+build/
+dist/
 *.pth
 *.pt
 *.ckpt

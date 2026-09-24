@@ -1,0 +1,22 @@
+[
+  {
+    "dataset": "slope_fracture",
+    "files": 658,
+    "bytes": 49232396
+  },
+  {
+    "dataset": "small",
+    "files": 80,
+    "bytes": 318838
+  },
+  {
+    "dataset": "large",
+    "files": 50,
+    "bytes": 18231843
+  },
+  {
+    "dataset": "full_views",
+    "files": 9,
+    "bytes": 18723996
+  }
+]
