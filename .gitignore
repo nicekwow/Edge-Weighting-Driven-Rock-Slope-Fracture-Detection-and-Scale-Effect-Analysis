@@ -1,0 +1,17 @@
+# Local inference outputs, figures, logs, and checkpoints are intentionally absent.
+01_论文与图表/
+05_评价结果/
+/work_dirs/
+*.pth
+*.pt
+*.ckpt
+*.log
+events.out.tfevents.*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+_runtime/
+*.tmp
