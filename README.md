@@ -11,7 +11,7 @@ This repository provides image data, annotations, model configurations, and Pyth
 | `data/large` | 25 validation image–mask pairs in the large-scale group. |
 | `data/full_views` | Three complete 2560 × 1440 views (`a11`, `a13`, `a14`), LabelMe annotations, and binary reference masks. Mask values are 0 for background and 255 for fracture. |
 
-The `small` and `large` groups partition the same 65 validation images; they are not additional samples. Run `python src/check_data.py` to verify image–mask pairing, dimensions, class values, and byte identity with the validation set. Read the [annotation notes](data/full_views/ANNOTATIONS.md) before using the full-view masks. File counts and sizes are recorded in [`data/dataset_manifest.json`](data/dataset_manifest.json).
+The `small` and `large` groups partition the same 65 validation images; they are not additional samples. Run `python src/check_data.py` to verify image–mask pairing, dimensions, class values, and byte identity with the validation set. File counts and sizes are recorded in [`data/dataset_manifest.json`](data/dataset_manifest.json).
 
 ## Code and configurations
 
@@ -28,7 +28,31 @@ The `small` and `large` groups partition the same 65 validation images; they are
 
 The project-specific edge-aware loss is implemented in [`src/research_extensions/my_loss.py`](src/research_extensions/my_loss.py). It identifies label boundaries from 3 × 3 neighborhoods and weights cross-entropy at those pixels. The edge-aware U-Net configuration combines ordinary cross-entropy (`loss_weight=1`) with this boundary term (`loss_weight=10`) in `loss_decode`. The extension is registered through `src/research_extensions/__init__.py`.
 
-The model configurations retain the recorded architectures and data pipelines. Their `data_root` values point to this repository, `load_from` is cleared, and `custom_imports` registers the local extension. These path changes do not alter the network or augmentation settings. The included MMSegmentation snapshot retains its [Apache 2.0 license](third_party/mmsegmentation/LICENSE). Its source and local changes are described in the [snapshot notes](third_party/mmsegmentation/README.md). The source environment used Python 3.8.18, PyTorch 2.1.0, torchvision 0.16.0, MMCV 2.1.0, MMEngine 0.9.1, MMSegmentation 1.2.2, NumPy 1.24.3, scikit-image 0.21.0, Pillow 10.0.1, and CUDA 11.8.
+The model configurations retain the recorded architectures and data pipelines. Their `data_root` values point to this repository, `load_from` is cleared, and `custom_imports` registers the local extension. These path changes do not alter the network or augmentation settings. The included MMSegmentation snapshot retains its [Apache 2.0 license](third_party/mmsegmentation/LICENSE). Its source and local changes are described in the [snapshot notes](third_party/mmsegmentation/README.md).
+
+## Environment setup
+
+The source environment used Python 3.8.18, PyTorch 2.1.0, torchvision 0.16.0, CUDA 11.8, MMCV 2.1.0, MMEngine 0.9.1, and MMSegmentation 1.2.2. The following Windows PowerShell commands follow the [PyTorch 2.1.0 installation instructions](https://docs.pytorch.org/get-started/previous-versions/) and the [MMSegmentation installation guide](https://mmsegmentation.readthedocs.io/en/main/get_started.html). Run them from the repository root after installing Conda and an NVIDIA driver suitable for CUDA 11.8.
+
+```powershell
+conda create -n rock-fracture python=3.8.18 -y
+conda activate rock-fracture
+conda install pytorch==2.1.0 torchvision==0.16.0 pytorch-cuda=11.8 -c pytorch -c nvidia -y
+python -m pip install openmim==0.3.9
+mim install "mmengine==0.9.1"
+mim install "mmcv==2.1.0"
+python -m pip install "numpy==1.24.3" "scipy==1.10.1" "scikit-image==0.21.0" "Pillow==10.0.1" "opencv-python==4.10.0.84"
+python -m pip install -e .\third_party\mmsegmentation
+```
+
+The editable installation uses the MMSegmentation source included here. If MIM selects an MMCV source archive rather than a compatible wheel, consult the [MMCV installation guide](https://mmcv.readthedocs.io/en/latest/get_started/installation.html) for build requirements. Check the installed versions and compiled MMCV operations before running the models:
+
+```powershell
+python -c "import torch, mmcv, mmengine, mmseg; from mmcv.ops import nms; print(torch.__version__, torch.version.cuda, mmcv.__version__, mmengine.__version__, mmseg.__version__)"
+python 'src/check_data.py'
+```
+
+The version check should print `2.1.0 11.8 2.1.0 0.9.1 1.2.2`. GPU training also requires `torch.cuda.is_available()` to return `True`.
 
 ## Running the analyses
 
