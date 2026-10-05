@@ -9,8 +9,6 @@ import argparse
 import csv
 import copy
 import json
-import os
-import sys
 import time
 from pathlib import Path
 
@@ -24,13 +22,13 @@ ROOT = Path(__file__).resolve().parents[1]
 import research_extensions  # noqa: F401
 
 from mmengine import Config
-from mmseg.apis import inference_model, init_model
+from sliding_window_detection import (build_single_pass_model, predict_mask,
+                                      sliding_window_detection, window_starts)
 
 
 HERE = ROOT / "results" / "strategy_comparison"
 SOURCES = ROOT / "data" / "full_views"
 PREDICTIONS = HERE / "predictions"
-PREDICTIONS.mkdir(parents=True, exist_ok=True)
 CONFIG = ROOT / "configs" / "ours.py"
 CHECKPOINT = ROOT / "checkpoints" / "ours.pth"
 SID_TO_NAME = {"a11": "Image a", "a13": "Image b", "a14": "Image c"}
@@ -38,17 +36,19 @@ SID_TO_NAME = {"a11": "Image a", "a13": "Image b", "a14": "Image c"}
 
 def positions(length, side):
     """Cover one axis with 50% nominal overlap and an edge-aligned last crop."""
-    stride = side // 2
-    starts = list(range(0, length - side + 1, stride))
-    if starts[-1] != length - side:
-        starts.append(length - side)
-    return starts
+    return window_starts(length, side, overlap=0.5)
 
 
 def predict(model, image):
     """MMSeg expects BGR arrays; the source PNGs are read as RGB by Pillow."""
-    bgr = np.asarray(image)[:, :, ::-1].copy()
-    return inference_model(model, bgr).pred_sem_seg.data[0].cpu().numpy().astype(np.uint8)
+    return predict_mask(model, image)
+
+
+def synchronize(model):
+    """Wait for this model's CUDA operations before measuring elapsed time."""
+    device = next(model.parameters()).device
+    if device.type == 'cuda':
+        torch.cuda.synchronize(device)
 
 
 def run_condition(model, image, strategy, side, original_pipeline, native_pipeline):
@@ -65,7 +65,7 @@ def run_condition(model, image, strategy, side, original_pipeline, native_pipeli
         model.cfg.test_pipeline = copy.deepcopy(native_pipeline)
     first = image.crop((0, 0, side, side)) if strategy == "Sliding-window detection" else image
     predict(model, first)  # Shape warm-up; excluded from timing.
-    torch.cuda.synchronize()
+    synchronize(model)
     started = time.perf_counter()
     if strategy == "Native full":
         mask = predict(model, image)
@@ -74,22 +74,12 @@ def run_condition(model, image, strategy, side, original_pipeline, native_pipeli
         mask = predict(model, image)
         calls = 1
     elif strategy == "Sliding-window detection":
-        # Strict majority voting assigns exact ties to background. This
-        # differs from averaging class probabilities in MMSeg's internal slide.
-        votes = np.zeros((height, width), dtype=np.uint16)
-        count = np.zeros((height, width), dtype=np.uint16)
-        xs, ys = positions(width, side), positions(height, side)
-        for y in ys:
-            for x in xs:
-                region = predict(model, image.crop((x, y, x + side, y + side)))
-                votes[y:y + side, x:x + side] += region
-                count[y:y + side, x:x + side] += 1
-        assert np.all(count > 0)
-        mask = ((votes * 2) > count).astype(np.uint8)
-        calls = len(xs) * len(ys)
+        # Use the project's external window loop and hard-label voting.
+        mask, calls = sliding_window_detection(
+            image, lambda window: predict(model, window), side, overlap=0.5)
     else:
         raise ValueError(strategy)
-    torch.cuda.synchronize()
+    synchronize(model)
     elapsed = time.perf_counter() - started
     assert mask.shape == (height, width)
     return mask, calls, elapsed
@@ -118,26 +108,32 @@ def main():
                         help="Path to the edge-aware U-Net checkpoint")
     parser.add_argument("--config", type=Path, default=CONFIG,
                         help="Path to the corresponding MMSegmentation config")
+    parser.add_argument("--device", default="cuda:0")
     args = parser.parse_args()
     if not args.checkpoint.is_file():
         parser.error(f"checkpoint not found: {args.checkpoint}")
     if not args.config.is_file():
         parser.error(f"config not found: {args.config}")
     cfg = Config.fromfile(str(args.config))
-    cfg.load_from = None  # The explicit --checkpoint supplies model weights.
-    cfg.model.test_cfg = dict(mode="whole")
-    cfg.model.data_preprocessor.test_cfg = dict(size_divisor=16)
+    original_pipeline = copy.deepcopy(cfg.test_pipeline)
+    if not any(t['type'] == 'Resize' for t in original_pipeline):
+        parser.error('the resize comparison requires a Resize transform in test_pipeline')
     torch.manual_seed(0)
     torch.set_num_threads(4)
     torch.backends.cudnn.benchmark = False
-    model = init_model(cfg, str(args.checkpoint), device="cuda:0").eval()
-    original_pipeline = copy.deepcopy(model.cfg.test_pipeline)
-    native_pipeline = [copy.deepcopy(t) for t in original_pipeline if t["type"] != "Resize"]
+    model = build_single_pass_model(args.config, args.checkpoint, args.device)
+    native_pipeline = copy.deepcopy(model.cfg.test_pipeline)
     assert model.test_cfg["mode"] == "whole"
     conditions = ([("Native full", 0)] if args.baseline else
                   [("Resize", s) for s in (1024, 512, 256)] +
                   [("Sliding-window detection", s) for s in (1024, 512, 256)])
-    rows = json.loads((HERE / "per_image_metrics.json").read_text(encoding="utf-8")) if args.baseline else []
+    PREDICTIONS.mkdir(parents=True, exist_ok=True)
+    metrics_file = HERE / "per_image_metrics.json"
+    rows = (json.loads(metrics_file.read_text(encoding="utf-8"))
+            if args.baseline and metrics_file.is_file() else [])
+    # A baseline can run on a fresh checkout or replace a previous baseline.
+    if args.baseline:
+        rows = [row for row in rows if row['strategy'] != 'Native full']
     for sid, label in SID_TO_NAME.items():
         image = Image.open(SOURCES / f"{sid}.png").convert("RGB")
         reference = np.asarray(Image.open(SOURCES / f"{sid}_mask.png")) != 0

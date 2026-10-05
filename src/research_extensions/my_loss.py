@@ -1,4 +1,12 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+"""Project edge-aware training loss; see docs/edge_aware_loss.md.
+
+The configured decoder objective is CE + 10 * boundary_CE, where boundary
+pixels are detected from class changes in the 3x3 label neighbourhood.
+EdgeAwareLoss supplies the additional boundary term; ordinary CE is a
+separate loss in configs/ours.py. The boundary detector uses class labels.
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -88,6 +96,8 @@ def edge_aware_loss(pred: torch.Tensor,
 
     edge_map = get_categorical_edge_map(target, ignore_index).to(
         dtype=basic_loss.dtype)
+    # Recorded implementation: increase the contribution of CE
+    # at annotated fracture-background boundaries.
     loss_scale = edge_weight * edge_map
     if include_base_loss:
         loss_scale = loss_scale + 1

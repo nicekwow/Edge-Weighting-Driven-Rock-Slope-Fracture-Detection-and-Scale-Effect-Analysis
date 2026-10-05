@@ -140,11 +140,14 @@ model = dict(
         dropout_ratio=0.1,
         in_channels=64,
         in_index=4,
+        # Project improvement: ordinary CE plus 10 times boundary CE.
+        # Implementation: src/research_extensions/my_loss.py.
         loss_decode=[
             dict(
                 loss_name='loss_ce', loss_weight=1.0, type='CrossEntropyLoss'),
             dict(
-                loss_name='loss_edge', loss_weight=10.0, type='EdgeAwareLoss'),
+                loss_name='loss_edge', loss_weight=10.0, type='EdgeAwareLoss',
+                edge_weight=1.0, include_base_loss=False, avg_non_ignore=True),
         ],
         norm_cfg=dict(requires_grad=True, type='SyncBN'),
         num_classes=2,

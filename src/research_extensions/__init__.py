@@ -7,5 +7,8 @@ classes named in the configuration available to MMSegmentation's registry.
 
 from .mydata import MyDataset
 from .my_loss import EdgeAwareLoss
+from .sobel_losses import SobelImageEdgeAwareLoss, SobelMaskEdgeAwareLoss
+from .sobel_image_training import SobelImageEncoderDecoder, SobelImagePSPHead
 
-__all__ = ["MyDataset", "EdgeAwareLoss"]
+__all__ = ["MyDataset", "EdgeAwareLoss", "SobelImageEdgeAwareLoss",
+           "SobelMaskEdgeAwareLoss", "SobelImageEncoderDecoder", "SobelImagePSPHead"]

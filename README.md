@@ -2,6 +2,18 @@
 
 This repository provides image data, annotations, model configurations, and Python code for rock-slope fracture segmentation and inference-scale analysis. Trained checkpoints, prediction outputs, metric tables, figures, logs, and manuscript files are not included.
 
+## Project methods
+
+| Method | Implementation | Configuration or command |
+| --- | --- | --- |
+| Edge-weighted cross-entropy | [Sobel image and mask losses](src/research_extensions/sobel_losses.py); [image-to-loss data flow](src/research_extensions/sobel_image_training.py) | [`ours_sobel_image.py`](configs/ours_sobel_image.py) / [`ours_sobel_mask.py`](configs/ours_sobel_mask.py) |
+| Recorded categorical boundary loss | [`EdgeAwareLoss`](src/research_extensions/my_loss.py) | [`ours.py`](configs/ours.py) |
+| Custom sliding-window detection | [Native crops and strict majority voting](src/sliding_window_detection.py) | `python src/sliding_window_detection.py --image IMAGE --checkpoint CHECKPOINT` |
+
+The Sobel comparison uses either aligned training-image intensities or binary reference masks to weight pixel cross-entropy. Both configurations retain the recorded edge-weighted model's architecture, augmentation, optimizer and training schedule, with the same random seed. They are new training variants; their results must be evaluated separately from the recorded categorical-boundary run. See the [loss equations and configuration details](docs/edge_aware_loss.md).
+
+The custom sliding-window implementation processes each original-resolution crop once, accumulates its **binary fracture prediction**, and returns fracture only when more than half of the covering windows predict fracture. Ties become background. This is the project's external voting method. MMSegmentation's built-in `slide_inference` averages logits and is a separate implementation. See the [window grid and voting details](docs/sliding_window_detection.md).
+
 ## Data
 
 | Path | Contents |
@@ -17,16 +29,18 @@ The `small` and `large` groups partition the same 65 validation images; they are
 
 | Path | Purpose |
 | --- | --- |
-| `src/research_extensions` | Register the binary dataset and `EdgeAwareLoss` with MMSegmentation. |
+| `src/research_extensions` | Register the binary dataset, edge losses, and image-loss training adapters with MMSegmentation. |
 | `third_party/mmsegmentation/mmseg` | Core MMSegmentation source package from the local research environment. |
 | `third_party/mmsegmentation/tools/train.py` and `test.py` | MMSegmentation training and testing entry points. |
 | `configs/unet.py` and `configs/ours.py` | U-Net training configurations without and with edge-aware loss. |
+| `configs/ours_sobel_image.py` and `configs/ours_sobel_mask.py` | Compare image-Sobel and mask-Sobel weights under the recorded `ours.py` settings. |
 | `configs/deeplabv3plus.py` and `configs/segmenter.py` | Comparison-model training configurations. |
 | `configs/evaluation_65_images.py` | Fixed validation pipeline for the two scale groups. |
 | `src/run_scale_evaluation.py` | Evaluate the 40/25 split using per-class intersections and unions. |
 | `src/run_window_experiment.py` | Compare single-pass whole-image resizing with sliding-window detection on the three full views. |
+| `src/sliding_window_detection.py` | Standalone custom window detection and binary majority-vote fusion. |
 
-The project-specific edge-aware loss is implemented in [`src/research_extensions/my_loss.py`](src/research_extensions/my_loss.py). It identifies label boundaries from 3 × 3 neighborhoods and weights cross-entropy at those pixels. The edge-aware U-Net configuration combines ordinary cross-entropy (`loss_weight=1`) with this boundary term (`loss_weight=10`) in `loss_decode`. The extension is registered through `src/research_extensions/__init__.py`.
+All three edge-loss configurations combine ordinary decoder cross-entropy (`loss_weight=1`) with an additional edge-weighted term (`loss_weight=10`). The recorded [`ours.py`](configs/ours.py) uses categorical label boundaries from 3 × 3 neighborhoods. The two Sobel configurations use normalized gradient magnitudes. The extension is registered through [`src/research_extensions/__init__.py`](src/research_extensions/__init__.py).
 
 The model configurations retain the recorded architectures and data pipelines. Their `data_root` values point to this repository, `load_from` is cleared, and `custom_imports` registers the local extension. These path changes do not alter the network or augmentation settings. The included MMSegmentation snapshot retains its [Apache 2.0 license](third_party/mmsegmentation/LICENSE). Its source and local changes are described in the [snapshot notes](third_party/mmsegmentation/README.md).
 
@@ -70,7 +84,22 @@ python 'third_party/mmsegmentation/tools/train.py' 'configs/ours.py' --work-dir 
 python 'third_party/mmsegmentation/tools/test.py' 'configs/ours.py' 'PATH_TO_OURS_CHECKPOINT.pth' --work-dir 'outputs/ours_test'
 ```
 
+Run the two Sobel variants sequentially on a single GPU:
+
+```powershell
+python 'third_party/mmsegmentation/tools/train.py' 'configs/ours_sobel_mask.py' --work-dir 'outputs/ours_sobel_mask'
+python 'third_party/mmsegmentation/tools/train.py' 'configs/ours_sobel_image.py' --work-dir 'outputs/ours_sobel_image'
+```
+
 Supply the checkpoint corresponding to each configuration. Checkpoints are not included in this repository.
+
+For custom sliding-window detection of one full image:
+
+```powershell
+python 'src/sliding_window_detection.py' --config 'configs/ours.py' --checkpoint 'PATH_TO_OURS_CHECKPOINT.pth' --image 'data/full_views/a11.png' --window-size 512 --overlap 0.5 --output 'outputs/a11_mask.png'
+```
+
+For the scale groups and full-image inference comparison:
 
 ```powershell
 python 'src/run_scale_evaluation.py' --checkpoint 'PATH_TO_UNET_CHECKPOINT.pth'
@@ -79,3 +108,7 @@ python 'src/run_window_experiment.py' --baseline --checkpoint 'PATH_TO_OURS_CHEC
 ```
 
 The window experiment compares whole-image long-edge sizes of 1024, 512, and 256 pixels with unscaled square windows of the same side lengths. Windows use 50% nominal overlap. A strict majority vote resolves overlapping predictions, with ties assigned to background. The `--baseline` run processes each original image once. The 65-image evaluation uses a separate resize-and-slide pipeline. Generated predictions and metrics remain in ignored local output directories.
+
+## Implementation checks
+
+With the environment and `PYTHONPATH` above, run `python -m unittest discover -s tests -v`. The checks cover known Sobel responses, image normalization, finite loss gradients, ignored labels, crop coverage, boundary alignment, and strict voting including ties. They also compare the shared voting function with the original experiment loop.
