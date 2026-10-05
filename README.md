@@ -1,6 +1,6 @@
 # Edge-Weighting-Driven Rock Slope Fracture Detection and Scale Effect Analysis
 
-This repository provides image data, annotations, model configurations, and Python code for rock-slope fracture segmentation and inference-scale analysis. Trained checkpoints, prediction outputs, metric tables, figures, logs, and manuscript files are not included.
+This repository provides the training dataset, model configurations, and Python code for rock-slope fracture segmentation and inference-scale analysis. Trained checkpoints, prediction outputs, metric tables, figures, logs, and manuscript files are not included.
 
 ## Project methods
 
@@ -16,14 +16,7 @@ The custom sliding-window implementation processes each original-resolution crop
 
 ## Data
 
-| Path | Contents |
-| --- | --- |
-| `data/slope_fracture` | 264 training and 65 validation image–mask pairs. Mask values are 0 for background and 1 for fracture. |
-| `data/small` | 40 validation image–mask pairs in the small-scale group. |
-| `data/large` | 25 validation image–mask pairs in the large-scale group. |
-| `data/full_views` | Three complete 2560 × 1440 views (`a11`, `a13`, `a14`), LabelMe annotations, and binary reference masks. Mask values are 0 for background and 255 for fracture. |
-
-The `small` and `large` groups partition the same 65 validation images; they are not additional samples. Run `python src/check_data.py` to verify image–mask pairing, dimensions, class values, and byte identity with the validation set. File counts and sizes are recorded in [`data/dataset_manifest.json`](data/dataset_manifest.json).
+The rock-slope fracture training dataset is provided in [`data/slope_fracture`](data/slope_fracture).
 
 ## Code and configurations
 
