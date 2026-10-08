@@ -1,5 +1,5 @@
-# MMSegmentation source snapshot
+# MMSegmentation
 
-This directory contains the MMSegmentation source package from the local research environment, together with its training and testing entry points, packaging metadata, dependency lists, and original Apache 2.0 license. The unused Sobel-head draft with a non-English filename was excluded. Chinese comments and messages in the included source were translated to English without changing the computation.
+This directory contains the MMSegmentation 1.2.2 source package, training and testing entry points, and packaging files. The project configurations register the Sobel model components from [`src/research_extensions`](../../src/research_extensions).
 
-The project-specific model configurations and datasets are at the repository root. The Sobel losses and image-to-loss adapters are registered from `src/research_extensions` through the root configurations. See the root README for the supported environment and commands.
+See the [repository README](../../README.md) for the method, installation, and usage. MMSegmentation is distributed under the [Apache 2.0 license](LICENSE).
