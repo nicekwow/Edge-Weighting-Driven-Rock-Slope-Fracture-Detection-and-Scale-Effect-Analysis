@@ -1,6 +1,7 @@
-# Portable copy of the recorded MMSegmentation configuration.
-# Only data_root, load_from, and custom module registration differ from the source snapshot.
+# Grad+U-Net with Sobel gradients of the aligned training image.
+# Network, augmentation, optimizer and validation settings are retained.
 custom_imports = dict(imports=['research_extensions'], allow_failed_imports=False)
+randomness = dict(seed=1498288285, diff_rank_seed=False, deterministic=False)
 
 crop_size = (
     512,
@@ -140,14 +141,17 @@ model = dict(
         dropout_ratio=0.1,
         in_channels=64,
         in_index=4,
-        # Project improvement: ordinary CE plus 10 times boundary CE.
-        # Implementation: src/research_extensions/my_loss.py.
+        # Image -> grayscale -> Sobel magnitude -> pixel CE weighting.
+        # See src/research_extensions/sobel_losses.py and sobel_image_training.py.
         loss_decode=[
             dict(
                 loss_name='loss_ce', loss_weight=1.0, type='CrossEntropyLoss'),
             dict(
-                loss_name='loss_edge', loss_weight=10.0, type='EdgeAwareLoss',
-                edge_weight=1.0, include_base_loss=False, avg_non_ignore=True),
+                loss_name='loss_edge', loss_weight=10.0,
+                type='SobelImageEdgeAwareLoss', edge_weight=1.0,
+                include_base_loss=False, avg_non_ignore=True,
+                mean=(123.675, 116.28, 103.53),
+                std=(58.395, 57.12, 57.375)),
         ],
         norm_cfg=dict(requires_grad=True, type='SyncBN'),
         num_classes=2,
@@ -157,7 +161,7 @@ model = dict(
             3,
             6,
         ),
-        type='PSPHead'),
+        type='SobelImagePSPHead'),
     pretrained=None,
     test_cfg=dict(crop_size=(
         512,
@@ -167,7 +171,7 @@ model = dict(
         85,
     )),
     train_cfg=dict(),
-    type='EncoderDecoder')
+    type='SobelImageEncoderDecoder')
 norm_cfg = dict(requires_grad=True, type='BN')
 optim_wrapper = dict(
     clip_grad=None,
@@ -340,4 +344,4 @@ visualizer = dict(
         dict(type='LocalVisBackend'),
         dict(type='TensorboardVisBackend'),
     ])
-work_dir = './work_dirs\\unet-s5-d16_pspnet_4xb4-160k_mydata_BoundaryLoss-512x512'
+work_dir = './work_dirs/ours'

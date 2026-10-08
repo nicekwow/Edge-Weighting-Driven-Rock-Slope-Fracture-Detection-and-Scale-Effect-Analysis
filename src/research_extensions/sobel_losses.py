@@ -1,19 +1,20 @@
-"""Sobel edge-weighted CE variants for a controlled training comparison.
+"""Sobel edge-weighted cross-entropy for fracture segmentation.
 
 Both variants use the same Sobel kernels and fixed magnitude normalization.
-SobelMaskEdgeAwareLoss obtains weights from binary reference masks;
 SobelImageEdgeAwareLoss obtains them from the aligned training RGB images.
+It is the loss used by configs/ours.py. SobelMaskEdgeAwareLoss provides an
+optional comparison using binary reference masks instead of image intensity.
 They supply an additional term alongside ordinary cross-entropy.
 """
 
 import math
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from mmseg.registry import MODELS
-from mmseg.models.losses.utils import weight_reduce_loss
-from .my_loss import EdgeAwareLoss
+from mmseg.models.losses.utils import get_class_weight, weight_reduce_loss
 
 
 def sobel_magnitude(gray):
@@ -46,10 +47,32 @@ def get_sobel_mask_edge_map(target, ignore_index=-100):
     return sobel_magnitude(labels) * valid_neighbourhood(target, ignore_index)
 
 
-class _SobelEdgeAwareLoss(EdgeAwareLoss):
+class _SobelEdgeAwareLoss(nn.Module):
     """Shared CE weighting/reduction; subclasses supply the edge map."""
 
     requires_image = False
+
+    def __init__(self, reduction='mean', class_weight=None, loss_weight=1.0,
+                 loss_name='loss_edge', avg_non_ignore=True, edge_weight=1.0,
+                 include_base_loss=False):
+        super().__init__()
+        if reduction not in ('none', 'mean', 'sum'):
+            raise ValueError(f'Unsupported reduction: {reduction}')
+        if edge_weight < 0:
+            raise ValueError('edge_weight must be non-negative')
+        self.reduction = reduction
+        self.class_weight = get_class_weight(class_weight)
+        self.loss_weight = loss_weight
+        self._loss_name = loss_name
+        self.avg_non_ignore = avg_non_ignore
+        self.edge_weight = edge_weight
+        # Keep False when the decoder already includes CrossEntropyLoss.
+        self.include_base_loss = include_base_loss
+
+    @property
+    def loss_name(self):
+        """Name used by MMSegmentation to collect the decoder loss."""
+        return self._loss_name
 
     def edge_map(self, target, ignore_index, image_inputs):
         raise NotImplementedError

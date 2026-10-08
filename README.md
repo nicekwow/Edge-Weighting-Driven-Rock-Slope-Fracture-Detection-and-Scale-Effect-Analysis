@@ -6,11 +6,10 @@ This repository provides the training dataset, model configurations, and Python 
 
 | Method | Implementation | Configuration or command |
 | --- | --- | --- |
-| Edge-weighted cross-entropy | [Sobel image and mask losses](src/research_extensions/sobel_losses.py); [image-to-loss data flow](src/research_extensions/sobel_image_training.py) | [`ours_sobel_image.py`](configs/ours_sobel_image.py) / [`ours_sobel_mask.py`](configs/ours_sobel_mask.py) |
-| Recorded categorical boundary loss | [`EdgeAwareLoss`](src/research_extensions/my_loss.py) | [`ours.py`](configs/ours.py) |
+| Sobel edge-weighted cross-entropy | [`SobelImageEdgeAwareLoss`](src/research_extensions/sobel_losses.py); [image-to-loss data flow](src/research_extensions/sobel_image_training.py) | [`ours.py`](configs/ours.py) |
 | Custom sliding-window detection | [Native crops and strict majority voting](src/sliding_window_detection.py) | `python src/sliding_window_detection.py --image IMAGE --checkpoint CHECKPOINT` |
 
-The Sobel comparison uses either aligned training-image intensities or binary reference masks to weight pixel cross-entropy. Both configurations retain the recorded edge-weighted model's architecture, augmentation, optimizer and training schedule, with the same random seed. They are new training variants; their results must be evaluated separately from the recorded categorical-boundary run. See the [loss equations and configuration details](docs/edge_aware_loss.md).
+The main model in [`ours.py`](configs/ours.py) computes Sobel gradients from the aligned training image, after grayscale conversion, and uses the gradient magnitude to weight pixel cross-entropy. This follows the image-based edge weighting described in the manuscript. [`unet.py`](configs/unet.py) provides the comparison model with ordinary cross-entropy. See the [loss equations and configuration details](docs/edge_aware_loss.md).
 
 The custom sliding-window implementation processes each original-resolution crop once, accumulates its **binary fracture prediction**, and returns fracture only when more than half of the covering windows predict fracture. Ties become background. This is the project's external voting method. MMSegmentation's built-in `slide_inference` averages logits and is a separate implementation. See the [window grid and voting details](docs/sliding_window_detection.md).
 
@@ -26,16 +25,16 @@ The rock-slope fracture training dataset is provided in [`data/slope_fracture`](
 | `third_party/mmsegmentation/mmseg` | Core MMSegmentation source package from the local research environment. |
 | `third_party/mmsegmentation/tools/train.py` and `test.py` | MMSegmentation training and testing entry points. |
 | `configs/unet.py` and `configs/ours.py` | U-Net training configurations without and with edge-aware loss. |
-| `configs/ours_sobel_image.py` and `configs/ours_sobel_mask.py` | Compare image-Sobel and mask-Sobel weights under the recorded `ours.py` settings. |
+| `configs/ours_sobel_mask.py` | Optional mask-Sobel comparison under the same training settings; the main model uses image gradients. |
 | `configs/deeplabv3plus.py` and `configs/segmenter.py` | Comparison-model training configurations. |
 | `configs/evaluation_65_images.py` | Fixed validation pipeline for the two scale groups. |
 | `src/run_scale_evaluation.py` | Evaluate the 40/25 split using per-class intersections and unions. |
 | `src/run_window_experiment.py` | Compare single-pass whole-image resizing with sliding-window detection on the three full views. |
 | `src/sliding_window_detection.py` | Standalone custom window detection and binary majority-vote fusion. |
 
-All three edge-loss configurations combine ordinary decoder cross-entropy (`loss_weight=1`) with an additional edge-weighted term (`loss_weight=10`). The recorded [`ours.py`](configs/ours.py) uses categorical label boundaries from 3 × 3 neighborhoods. The two Sobel configurations use normalized gradient magnitudes. The extension is registered through [`src/research_extensions/__init__.py`](src/research_extensions/__init__.py).
+The main decoder combines ordinary cross-entropy (`loss_weight=1`) with an additional term weighted by the normalized Sobel magnitude (`loss_weight=10`). Only the additional term is returned by `SobelImageEdgeAwareLoss`, so ordinary cross-entropy is counted once. The auxiliary FCN head retains cross-entropy with weight 0.4. The extension is registered through [`src/research_extensions/__init__.py`](src/research_extensions/__init__.py).
 
-The model configurations retain the recorded architectures and data pipelines. Their `data_root` values point to this repository, `load_from` is cleared, and `custom_imports` registers the local extension. These path changes do not alter the network or augmentation settings. The included MMSegmentation snapshot retains its [Apache 2.0 license](third_party/mmsegmentation/LICENSE). Its source and local changes are described in the [snapshot notes](third_party/mmsegmentation/README.md).
+The model configurations retain the network architectures and data pipelines. Their `data_root` values point to this repository, `load_from` is cleared, and `custom_imports` registers the local extension. The image adapter passes the training image to the loss without adding trainable parameters or changing the head's prediction operations. The included MMSegmentation snapshot retains its [Apache 2.0 license](third_party/mmsegmentation/LICENSE). Its source and local changes are described in the [snapshot notes](third_party/mmsegmentation/README.md).
 
 ## Environment setup
 
@@ -77,14 +76,13 @@ python 'third_party/mmsegmentation/tools/train.py' 'configs/ours.py' --work-dir 
 python 'third_party/mmsegmentation/tools/test.py' 'configs/ours.py' 'PATH_TO_OURS_CHECKPOINT.pth' --work-dir 'outputs/ours_test'
 ```
 
-Run the two Sobel variants sequentially on a single GPU:
+For the optional mask-Sobel comparison, use:
 
 ```powershell
 python 'third_party/mmsegmentation/tools/train.py' 'configs/ours_sobel_mask.py' --work-dir 'outputs/ours_sobel_mask'
-python 'third_party/mmsegmentation/tools/train.py' 'configs/ours_sobel_image.py' --work-dir 'outputs/ours_sobel_image'
 ```
 
-Supply the checkpoint corresponding to each configuration. Checkpoints are not included in this repository.
+`configs/ours_sobel_image.py` remains an alias of `ours.py` for existing commands. Supply the checkpoint trained with the corresponding configuration. Checkpoints are not included in this repository.
 
 For custom sliding-window detection of one full image:
 

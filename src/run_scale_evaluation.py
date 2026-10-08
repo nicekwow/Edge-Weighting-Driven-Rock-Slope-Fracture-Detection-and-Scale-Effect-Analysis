@@ -22,7 +22,7 @@ CONFIG_FILE = ROOT / 'configs' / 'evaluation_65_images.py'
 os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 os.environ['MPLCONFIGDIR'] = str(OUT / '_runtime/matplotlib')
 os.environ['CUDA_CACHE_PATH'] = str(OUT / '_runtime/cuda')
-import research_extensions  # noqa: F401  Register MyDataset and EdgeAwareLoss.
+import research_extensions  # noqa: F401  Register the dataset and Sobel model classes.
 
 import numpy as np
 import torch
