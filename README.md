@@ -30,7 +30,19 @@ At each pixel, `F` counts fracture predictions and `C` counts all covering windo
 
 ## Data
 
-The rock-slope fracture training dataset is provided in [`data/slope_fracture`](data/slope_fracture).
+The dataset is stored in [`data/slope_fracture`](data/slope_fracture), relative to the repository root. The training configurations use this directory as `data_root`:
+
+```text
+data/slope_fracture/
+├── img_dir/
+│   ├── train/
+│   └── val/
+└── ann_dir/
+    ├── train/
+    └── val/
+```
+
+`img_dir` stores images and `ann_dir` stores annotation masks. The `train` and `val` subdirectories are used for training and validation, respectively. Run the commands below from the repository root so these relative paths resolve correctly.
 
 ## Installation
 
